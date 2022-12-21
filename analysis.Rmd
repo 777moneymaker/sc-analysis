@@ -3,8 +3,8 @@ title: "Single Cell - Example analysis"
 author: "Miłosz Chodkowski"
 output:
   html_document:
-    fig_width: 16
-    fig_height: 9
+    fig_width: 6
+    fig_height: 4
 ---
 
 # Experiment summary
@@ -13,16 +13,24 @@ Dataset of induced pluripotent stem cells generated from three different individ
 
 GEO Accession: ***GSE77288***
 
-# Load libraries
+# R packages
 
-```{r}
+> "How hard can it be?" *\~ Jeremy Clarkson*
+
+------------------------------------------------------------------------
+
+## Load libraries
+
+```{r Libs load, message=FALSE, warning=FALSE}
 if(!require("SingleCellExperiment")){
   BiocManager::install("SingleCellExperiment")
   require("SingleCellExperiment")
 }
 if(!require("scater")){
   BiocManager::install("scater")
-  require("scater")
+}
+if(!require("scuttle")){
+  BiocManager::install("scuttle")
 }
 if(!require("tidyverse")){
   install.packages("tidyverse")
@@ -34,18 +42,18 @@ if(!require("data.table")){
 
 ```
 
-# Load data
+## Load data
 
 Original file called
 
-```{r}
+```{r Original data}
 df = data.table::fread("GSE77288_molecules-raw-single-per-sample.txt.gz")
 df[1:5, 1:5]
 ```
 
 Splitted into molecules (a tab-delimited file with the gene counts for each cell):
 
-```{r}
+```{r Molecules}
 molecules = read.table("data/tung/molecules.txt", sep = "\t")
 
 molecules[1:5, 1:5]
@@ -53,18 +61,18 @@ molecules[1:5, 1:5]
 
 And annotation for molecules (a tab-delimited text file with the cell annotations)
 
-```{r}
+```{r Annotations}
 annotation = read.table("data/tung/annotation.txt", sep = "\t", header = TRUE)
 annotation[1:5, 1:5]
 ```
 
-# Create object of type `SingleCellExperiment`
+## Create object of type `SingleCellExperiment`
 
 ![SingleCellExperiment obj schema](https://www.singlecellcourse.org/figures/singlecellexperiment.png)
 
 Object `SingleCellExperiment` uses a very popular `SummarizedExperiment` object (used in all biological anlyses). We pass a list to the `assays` argument in which we give our molecules data as `counts`. Then we add a `colData` parameter to describe our *samples*. We can optionally add `rowData` which is a parameter to describe our *genes.*
 
-```{r}
+```{r SCE init}
 
 experiment = SingleCellExperiment(
   assays = list(counts = as.matrix(molecules)), # Type required is matrix, list passed as kwargs to `SummarizedExperiment)
@@ -75,20 +83,20 @@ experiment
 
 According to schema, data describing our samples are in colData. Let's see it:
 
-```{r}
+```{r Samples description}
 colData(experiment)
 ```
 
 We didn't specify any additional information for our genes, so rowData should be an empty df with named rows only:
 
-```{r}
+```{r Genes description}
 print(rowData(experiment))
 print(rowData(experiment) %>% rownames() %>% head(5)) # First 5 genes
 ```
 
-# Some stats
+## Some stats
 
-```{r}
+```{r Log assay}
 # Add a new assay that was log transformed
 # We can use `assay(sce, "assay_name")<-` to get or set a new assay
 # Or we can use some predefined functions with predefined names
@@ -97,9 +105,11 @@ print(rowData(experiment) %>% rownames() %>% head(5)) # First 5 genes
 # We already have raw counts
 # counts(experiment)
 
-# So just set new logcounts
+# So just set new logcounts3
 logcounts(experiment) <- log2(counts(experiment) + 1) # Add 1 to prevent log(0) = -Inf
 logcounts(experiment)[1:5, 1:5]
+# We can also use another method from another package that just works on SingleCellExperiment obj
+experiment = scuttle::logNormCounts(experiment)
 ```
 
 We can also add some mean count and total count per cell
@@ -115,7 +125,11 @@ cat("\n\n")
 print(colData(experiment)[1:5, ])
 ```
 
-# Visual presentation
+## Visual presentation
+
+This is utterly f\*\*\*\*\*\* disgusting *\~ Python programmer when he saw the R plotting code*
+
+------------------------------------------------------------------------
 
 Let's plot some stats for each batch:
 
@@ -154,11 +168,11 @@ scater::ggcells(experiment, aes(x = mean_counts, y = var_counts, color = batch))
               
 ```
 
-### Means what?
+##### Ok chief but what about interpretation?
 
-Positive correlation between mean(counts) and var(counts) is typical for RNA-seq, especially raw count data. This is not a good scenario (it's not really problematic if we know how to deal with it), because a lot of expression/FC estimators and test-s producing p-values and q-values assume that mean and variance are independent variables (no correlation).
+> Positive correlation between mean(counts) and var(counts) is typical for RNA-seq, especially raw count data. This is not a good scenario (it's not really problematic if we know how to deal with it), because a lot of expression/FC estimators and test-s producing p-values and q-values assume that mean and variance are independent variables (no correlation).
 
-# Reduced Dims
+### Sensational dimensionality reduction
 
 `Scater` library and `SingleCellExperiment` are tightly bound together, because `Scater` is based on `SingleCellExperiment`. It is very easy to apply some dimensionality reduction techniques and plot some advanced visualization *JUST LIKE THAT*. Let's try to do some dimensionality reduction:
 
@@ -198,14 +212,14 @@ ggpubr::ggarrange(ind_umap, ind_tsne)
 
 ```
 
-More XD
+Even more reduced dimensions
 
 ```{r}
 # Ok let's do more (lok it's so easy idk why people hate R)
 experiment = experiment %>% 
   scater::runNMF() %>%
   scater::runMDS()
-experiment %>% print() # Lol 2 new entries - sensational
+experiment %>% print() # Lol 2 new entries
 # so now we have all 5 reduced dim entries
 reducedDimNames(experiment) %>% print() # [1] "PCA"  "UMAP" "TSNE" "NMF"  "MDS" 
 
@@ -215,3 +229,150 @@ ind_mds = scater::plotReducedDim(experiment, "MDS", colour_by = "individual")
 ggpubr::ggarrange(ind_nmf, ind_mds)
 
 ```
+
+# Real analysis
+
+> Just do it! \*\~ ur transcriptomics teacher\*
+
+---
+
+## Dataset
+```{r Libs, message=FALSE, warning=FALSE}
+# Scater with AnnotationDbi and org.Hs.ed.db to convert EnsemblIDs to gene names
+library(scater)
+library(SingleCellExperiment)
+library(AnnotationDbi)
+library(org.Hs.eg.db)
+library(EnsDb.Hsapiens.v86)
+
+
+# In bioconductor we can have a lot of annotation resources. The are Database packages (like normal databases)
+# These resources can be GeneCentric or GenomeCentric (annotation on individual genes or whole genomes respectively)
+# Gene centric annotations can be:
+#   - on organism level: org.Mm.eg.db
+#   - on platform level: hgu133plus2.db
+#   - on system   level: GO.db
+# Genome centric annotations can be:
+#   - on transcriptome level:  TxDb.Hsapiens.UCSC.hg19.knownGene (Tx -transcript, Db- database = TranscriptDatabase)
+#   - on generic genome features: via GenomicFeatures package
+# Resources can also be web-based:
+#   - biomart: via biomaRt package
+
+# AnnotationDbi ("i" - interface) is a package that can easily query those databases
+# So we have Scater for some useful data analysis, db packages for getting metadata on our genes/genomes
+# and AnnotationDbi for all the queries
+
+# AnnotationDbi has methods like normal SQL language (SELECT, etc)
+# DB packages, after loading expose an object named exactly the same as the package
+# We can use the methods from AnnotationDbi to query db object using SQL methods
+# 
+# Example:
+# Types of columns our data has
+columns(org.Hs.eg.db) %>% print()
+# Types of keys that we can use to fetch the data
+keytypes(org.Hs.eg.db) %>% print()
+# Fetch keys using "SYMBOL" keytype and print some first keys
+keys(org.Hs.eg.db, keytype = "SYMBOL") %>% head() %>% print()
+# Or another using "ENSEMBL"
+keys(org.Hs.eg.db, keytype = "ENSEMBL") %>% head() %>% print()
+# Lets say we want to fetch first 15 genes
+# Lets get the first 15 keys (let's use symbol)
+qkeys = keys(org.Hs.eg.db, keytype = "SYMBOL") %>% head(15)
+print(qkeys)
+# SELECT on org.Hs.eg.db using our keys, keytype and return a columns
+fetched = select(org.Hs.eg.db, keys = qkeys, keytype = "SYMBOL", columns = c("SYMBOL", "ENSEMBL"))
+print(fetched)
+
+```
+
+Create our experiment once again. Let's name it ***sce***
+```{r}
+sce = SingleCellExperiment(assays = list(counts = as.matrix(molecules)), colData = annotation)
+print(sce)
+```
+
+Now we have to do some magic -> remove RNA spike-ins. But what are they? Acutally RNA spike-ins are synthetic RNA molecules that are added to a sample at a known concentration in order to control for variability in RNA sequencing experiments. They can be used to assess the accuracy and precision of the RNA-sequencing method, and to normalize the data from different samples.
+
+RNA spike-ins are typically made of RNA sequences that are well characterized and have known properties, such as length, GC content, and secondary structure. They can be derived from a variety of sources, including synthetic RNA oligonucleotides or cDNAs, and are typically added to the sample at a concentration that is much lower than the endogenous RNA present in the sample.
+
+So, we have to remove spike-ins from regular assays and store them as an 'alternative experiment'. Typical examples besided spike-in transcripts can be CRISPR tags in CITE-seq experiments. These data cannot be stored in the main assays of the SingleCellExperiment itself.
+
+```{r}
+# In our dataset spike-ins are annotated as ERCC 
+# (ERCC RNA spike-in mix, Invitrogen™, ThermoFisher Scientific)
+# So (according to SingleCellExperiment schema) we should remove genes (rows)
+# that begins with ERCC
+
+# Let's see if we have any
+# Get gene names (from rows)
+rownames(sce) %>%
+  # Construct lambda expr to check if gene name starts with ERCC
+  purrr::keep(~ stringr::str_starts(.x, "ERCC")) %>% 
+  # Take some first
+  head() %>%
+  # Print it
+  print()
+# Okay so we have some. Now let's extract them from regular assay to alternativeExperiment slot
+# Remember! we can index SingleCellExperiment obj using gene names and sample names
+ercc_idx = grep(pattern = "^ERCC", rownames(sce)) # indicies of ERCC transcripts
+print(ercc_idx %>% length()) # 89 ERCC's, nice 
+
+altExp(sce, "ERCC") <- sce[ercc_idx, ] # Set new alternativeExperiment by indexing sce
+print(sce) # altExpNames(1): ERCC - nice
+
+# Now remove these ERCC's from regular assays
+sce = sce[-ercc_idx, ] # rownames(18938), previously (19027) - nice
+
+```
+
+Now, let’s map ENSEMBL IDs to gene symbols. 
+```{r}
+# 'mapIds' gets the mapped ids (column) for a set of keys that are of a particular keytype. Usually returned as a named character vector.
+# In other words this function queries that db with our keys and returns a column that is mapped to our keys
+# So we get something like a dictionary, where key: our serach key, value: returned values
+# In this example we use ENSEMBL_IDS from our dataset as keys, and returned value is vector os gene symbols
+# where names are our keys. It's like a map, u know XD
+gene_names <- mapIds(org.Hs.eg.db, keys=rownames(sce), keytype="ENSEMBL", column="SYMBOL")
+print(gene_names %>% head())
+rowData(sce)$SYMBOL <- gene_names # Add new rowData entry
+print(rowData(sce))
+# Check for na 
+table(is.na(gene_names))
+```
+From the table command, we can see that most genes were annotated; however, 860 returned “NA.” By default, mapIds returs one symbol per ID; this behaviour can be changed using multiVals argument( we can take first, last, pass some function, etc). Let's remove all those NA's.
+```{r}
+sce = sce[!is.na(rowData(sce)$SYMBOL), ]
+print(sce)
+```
+
+## Basic QC
+
+> The following scater functions allow us to add per-cell and per-gene metrics useful for dataset evaluation. Most popular metrics per cell are total number of counts (UMIs), total number of detected genes, total number of mitochondrial counts, percent of mitochondrial counts, etc.
+
+```{r}
+umi_cell <- perCellQCMetrics(sce, use.altexps = T) # Also perform QC for alternative experiments
+
+# sum - sum of counts per cell
+# detected - number of detected genes
+# percent - percentage of counts in the top features
+print(umi_cell)
+
+umi_feature <- perFeatureQCMetrics(sce)
+# mean - mean counts per gene
+# deteced - number of gene detections
+print(umi_feature)
+
+# Add these QC metrics to our SingleCellExperiment object
+sce = sce %>% 
+  addPerCellQC(use.altexps = T) %>%
+  addPerFeatureQC()
+print(sce) # We Have more colData(), and rowData()
+print(colData(sce)[1:10, ]) 
+# Total column means total number of detected genes in a sample
+
+
+print(rowData(sce)[1:10, ])
+
+```
+
+
