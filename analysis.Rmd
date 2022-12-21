@@ -374,5 +374,154 @@ print(colData(sce)[1:10, ])
 print(rowData(sce)[1:10, ])
 
 ```
+Now plots some QC stats.
+```{r}
+# Plot a histogram of total number of counts per sample
+# @ is slot, or quicker access to property
+total_hist = ggplot(data = sce@colData %>% as.data.frame(), aes(total)) + geom_histogram(color = "red")
+p1 = total_hist + ggtitle("Histogram of total number of counts")
 
+# Plot hist of total number of detected genes per sample
+total_detected = ggplot(data = sce@colData %>% as.data.frame(), aes(detected)) + geom_histogram(color = "green")
+p2 = total_detected + ggtitle("Histogram of total number of detected genes")
+
+ggpubr::ggarrange(p1, p2)
+```
+## Filter low "expressed" cells
+
+Sometimes it’s hard to come up with an obvious filtering cutoff. In this case, adaptive threshold can help us identify points that are more than 3 median absolute deviations (MADs) away from the median in any of the variables we use for QC
+
+```{r}
+# Exclude cells where sum of counts if too loew
+th_sum = isOutlier(sce@colData$sum, log = TRUE, type = "lower") 
+# Exclude cells where total number of detected genes is too low
+th_detected = isOutlier(sce@colData$detected, log = TRUE, type = "lower")
+# Exclude cells where ERCC percent is too high
+th_ercc = isOutlier(sce@colData$altexps_ERCC_percent, log = TRUE, type = "higher") 
+
+discarded = th_sum | th_detected | th_ercc # Union of all the logical vectors to create one to rule them all
+
+# Let's see how many we have
+DataFrame(
+  LibSize=sum(th_sum), 
+  NExprs=sum(th_detected), 
+  SpikeProp=sum(th_ercc), 
+  Total=sum(discarded)
+) %>% print()
+```
+All of above could be done in one step XDDDD
+```{r}
+reasons <- quickPerCellQC(
+  umi_cell, 
+  sum.field = "sum", 
+  detected.field = "detected",
+  sub.fields=c("altexps_ERCC_percent"))
+print(reasons)
+colSums(as.matrix(reasons)) %>% print()
+#              low_lib_size            low_n_features    high_altexps_ERCC_percent                   discard 
+#                        47                       65                           137                       165
+```
+So according to these QC metrics we have to discard 165 cells. But let's store these information in our colData for now, and don't remove it just yet.
+```{r}
+sce$discard <- reasons$discard
+
+# Just plot which cells to discard
+# Use scater
+s_d = scater::plotColData(sce, x = "sum", y = "detected", colour_by = "discard")
+s_perc = scater::plotColData(sce, x = "sum", y = "altexps_ERCC_percent", colour_by = "discard")
+ggpubr::ggarrange(s_d, s_perc, 
+                  labels = c("Sum-Detected discards", "Sum-ERCC_percent discards"), 
+                  common.legend = T,
+                  widths = c(1.5, 2))
+```
+
+## Highly expressed genes
+Let’s take a look at the most expressed genes in the whole dataset. We will use symbols we obtained using AnnotationDbi.
+```{r}
+# Use sce, counts assay as the matrix used to get the top expressed genes
+# n: how many top genes?
+# feature_names_to_plot: NULL - use rownames (it means we use original loaded gene names). 
+# In this case we passed another column from rowData() specifying gene SYMBOL, fetched using AnnotationDbi.
+# colour_cells_by: (colour CELLS, which mean we pass a metadata of cells -> column of colData()) 
+p = plotHighestExprs(sce,
+                 n = 25,
+                 exprs_values = "counts", 
+                 feature_names_to_plot = "SYMBOL", 
+                 colour_cells_by="detected")
+p + ggtitle("Top 25 expressed genes across all cells")
+```
+
+We see a lot of genes like "RP*..blah" which are ribosomal genes. It's normal for sc-dataset to containg a lot of ribosomal or mitochondrial genes. Let’s keep the genes which were only detected (expression value > 1) in 2 or more cells. We’ll discard approximately 4,000 weakly expressed genes thanks to this.
+```{r}
+# By row to use genes not cells
+# Detection_limit = 1 -> Use only genes that have >= 1 read aligned (1 count)
+
+# nexpr function returns number of cells in which genes after above filtering are present
+# and we want only genes that are expressed in 2 cells or more -> that's why >=2 is present
+keep_feature <- nexprs(sce, byrow = TRUE, detection_limit = 1) >= 2
+rowData(sce)$discard <- !keep_feature # Add a 'discard' annotation to each gene (rowData())
+print(table(rowData(sce)$discard))
+```
+Wow - we have succesfully annotated all cell and marked 4205 as lowly expressed!
+
+# Sensational dimensions reduction
+Let's create a log2 raw transformed assay now and create a SingleCellExperiment object that will apply previous QC.
+```{r}
+assay(sce, "logcounts_raw") <- log2(counts(sce) + 1)
+print(sce) # assays(2): counts logcounts
+
+sce.qc = sce[!rowData(sce)$discard, !colData(sce)$discard]
+sce.qc
+```
+With log-transformation, we equalize the large difference between strongly and weakly expressed genes, and immediately see cells form groups by replicate, individual, and sequencing depth. Proof:
+
+##### PCA on raw counts
+```{r}
+
+# Again - calculate reduced dim
+sce.tmp = scater::runPCA(sce.qc, exprs_values = "counts")
+plotPCA(sce.tmp, colour_by = "batch", shape_by = "individual")
+```
+
+#####PCA on log-transformed counts
+```{r}
+
+# Again - calculate reduced dim
+sce.qc = scater::runPCA(sce.qc, exprs_values = "logcounts_raw")
+plotPCA(sce.qc, colour_by = "batch", shape_by = "individual")
+
+```
+Clearly log-transformation is benefitial for our data - it reduces the variance on the first principal component and already separates some biological effects. Moreover, it makes the distribution of the expression values more normal.
+But raw logcounts are not good enough. We should use the logcounts slot (produced by scater) which additionally to log2 normalizes by a lib size. Let's do it.
+```{r}
+# let's use sce for clarity
+# from now on `sce` object is the same as `sce.qc` (it has applied quality control)
+sce = scater::logNormCounts(sce.qc)
+sce # assays(3) counts logcounts_raw logcounts
+```
+
+Let's run PCA again, this time on logNormCounts
+```{r}
+sce = runPCA(sce, exprs_values = "logcounts")
+plotPCA(sce, colour_by = "batch", shape_by = "individual")
+
+```
+***NOW WE'RE TALKIN'***
+Let's do UMAP and tSNE
+```{r}
+
+sce = sce %>%
+  runTSNE(exprs_values = "logcounts") %>%
+  runUMAP(exprs_values = "logcounts")
+u = plotUMAP(sce, colour_by = "batch", shape_by = "individual")
+t = plotTSNE(sce, colour_by = "batch", shape_by = "individual")
+ggpubr::ggarrange(u, t)
+```
+## Other steps (skipped)
+We could do a couple of other steps also like:
+1. Analyze correlations with PCs
+2. Analyze and plot some explenatory variables
+3. blah...blah...blah
+
+In other words we can search for "Confounding Factors". For the sake of teacher, other students and my mental health I'll skip that in this project. Let's do something more fun.
 
