@@ -1,0 +1,120 @@
+---
+title: "Single Cell - Example analysis"
+output: analysis_result
+---
+
+# Experiment summary
+
+Dataset of induced pluripotent stem cells generated from three different individuals (Tung et al. 2017) in Yoav Gilad's lab at the University of Chicago. The experiments were carried out on the Fluidigm C1 platform using unique molecular identifiers (UMIs) for quantification.
+
+GEO Accession: ***GSE77288***
+
+# Load libraries
+
+```{r}
+if(!require("tidyverse")){
+  install.packages("tidyverse")
+  library("tidyverse")
+}
+if(!require("data.table")){
+  install.packages("data.table")
+}
+if(!require("BiocManager")){
+  install.packages("BiocManager")
+}
+if(!require("SingleCellExperiment")){
+  BiocManager::install("SingleCellExperiment")
+  require("SingleCellExperiment")
+}
+
+```
+
+# Load data
+
+Original file called
+
+```{r}
+df = data.table::fread("GSE77288_molecules-raw-single-per-sample.txt.gz") %>% tibble()
+df
+```
+
+Splitted into molecules (a tab-delimited file with the gene counts for each cell):
+
+```{r}
+molecules = read.table("data/tung/molecules.txt", sep = "\t")
+
+molecules
+```
+
+And annotation for molecules (a tab-delimited text file with the cell annotations)
+
+```{r}
+annotation = read.table("data/tung/annotation.txt", sep = "\t", header = TRUE)
+annotation
+```
+
+# Create object of type `SingleCellExperiment`
+
+![SingleCellExperiment obj schema](https://www.singlecellcourse.org/figures/singlecellexperiment.png)
+
+Object `SingleCellExperiment` uses a very popular `SummarizedExperiment` object (used in all biological anlyses). We pass a list to the `assays` argument in which we give our molecules data as `counts`. Then we add a `colData` parameter to describe our *samples*. We can optionally add `rowData` which is a parameter to describe our *genes.*
+
+```{r}
+
+experiment = SingleCellExperiment(
+  assays = list(counts = as.matrix(molecules)), # Type required is matrix, list passed as kwargs to `SummarizedExperiment)
+  colData = annotation # Can be table
+)
+experiment
+```
+According to schema, data describing our samples are in colData. Let's see it:
+```{r}
+colData(experiment)
+```
+
+We didn't specify any additional information for our genes, so rowData should be an empty df with named rows only:
+```{r}
+print(rowData(experiment))
+print(rowData(experiment) %>% rownames() %>% head(5)) # First 5 genes
+```
+# Some stats
+```{r}
+# Add a new assay that was log transformed
+# We can use `assay(sce, "assay_name")<-` to get or set a new assay
+# Or we can use some predefined functions with predefined names
+# Examples: `counts` - raw counts, `normcounts` - normalized counts, `logcounts` - logtransformed counts, `tpm` - transcripts per million, etc.
+
+# We already have raw counts
+# counts(experiment)
+
+# So just set new logcounts
+logcounts(experiment) <- log2(counts(experiment) + 1) # Add 1 to prevent log(0) = -Inf
+logcounts(experiment)[1:5, 1:5]
+```
+
+We can allso add some mean count and total count per cell
+```{r}
+print(counts(experiment)[1:5, 1:5])
+cat("\n\n")
+print(colMeans(counts(experiment)[1:5, 1:5]))
+cat("\n\n")
+colData(experiment)$mean_counts = colMeans(counts(experiment))
+colData(experiment)$total_counts = colSums(counts(experiment))
+cat("\n\n")
+print(colData(experiment)[1:5, ])
+```
+
+# Visual presentation
+
+Let's plot some stats for each batch:
+```{r}
+cells = colData(experiment) %>% as.data.frame() # convert from c(Data.frame, SingleCellExperiment) to data.frame
+print(cells)
+
+p = ggplot(data = cells)
+p + geom_violin(aes(x = batch, mean_counts, fill = batch))
+p + geom_violin(aes(x = batch, total_counts, fill = batch))
+
+```
+
+
