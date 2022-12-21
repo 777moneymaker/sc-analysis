@@ -11,20 +11,21 @@ GEO Accession: ***GSE77288***
 
 # Load libraries
 
-```{r}
+```{r message=FALSE, warning=TRUE}
+if(!require("SingleCellExperiment")){
+  BiocManager::install("SingleCellExperiment")
+  require("SingleCellExperiment")
+}
+if(!require("scater")){
+  BiocManager::install("scater")
+  require("scater")
+}
 if(!require("tidyverse")){
   install.packages("tidyverse")
   library("tidyverse")
 }
 if(!require("data.table")){
   install.packages("data.table")
-}
-if(!require("BiocManager")){
-  install.packages("BiocManager")
-}
-if(!require("SingleCellExperiment")){
-  BiocManager::install("SingleCellExperiment")
-  require("SingleCellExperiment")
 }
 
 ```
@@ -34,8 +35,8 @@ if(!require("SingleCellExperiment")){
 Original file called
 
 ```{r}
-df = data.table::fread("GSE77288_molecules-raw-single-per-sample.txt.gz") %>% tibble()
-df
+df = data.table::fread("GSE77288_molecules-raw-single-per-sample.txt.gz")
+df[1:5, 1:5]
 ```
 
 Splitted into molecules (a tab-delimited file with the gene counts for each cell):
@@ -67,17 +68,22 @@ experiment = SingleCellExperiment(
 )
 experiment
 ```
+
 According to schema, data describing our samples are in colData. Let's see it:
+
 ```{r}
 colData(experiment)
 ```
 
 We didn't specify any additional information for our genes, so rowData should be an empty df with named rows only:
+
 ```{r}
 print(rowData(experiment))
 print(rowData(experiment) %>% rownames() %>% head(5)) # First 5 genes
 ```
+
 # Some stats
+
 ```{r}
 # Add a new assay that was log transformed
 # We can use `assay(sce, "assay_name")<-` to get or set a new assay
@@ -93,6 +99,7 @@ logcounts(experiment)[1:5, 1:5]
 ```
 
 We can allso add some mean count and total count per cell
+
 ```{r}
 print(counts(experiment)[1:5, 1:5])
 cat("\n\n")
@@ -107,14 +114,26 @@ print(colData(experiment)[1:5, ])
 # Visual presentation
 
 Let's plot some stats for each batch:
+
 ```{r}
 cells = colData(experiment) %>% as.data.frame() # convert from c(Data.frame, SingleCellExperiment) to data.frame
 print(cells)
 
+th = theme(axis.text.x  = element_text(angle = -45, hjust = -0.1))
+
 p = ggplot(data = cells)
-p + geom_violin(aes(x = batch, mean_counts, fill = batch))
-p + geom_violin(aes(x = batch, total_counts, fill = batch))
+p + geom_violin(aes(x = batch, mean_counts, fill = batch)) + th
+p + geom_violin(aes(x = batch, total_counts, fill = batch)) + th
 
 ```
 
+If we we want to plot some data from specific assay showing a specific *GENE*, then we can use `ggcells` function from `scater` package:
 
+```{r}
+# Using scater's ggcells we can give a SingleCellExperiment instead of data.frame
+# Above example using scater
+scater::ggcells(experiment, aes(x = batch, y = mean_counts, fill = batch)) + geom_violin() + th
+# individual gene
+# expr_values default = logcounts
+scater::ggcells(experiment, aes(x = batch, y = ENSG00000198938, fill = batch), exprs_values = "logcounts") + geom_violin() + th
+```
