@@ -114,7 +114,7 @@ experiment = scuttle::logNormCounts(experiment)
 
 We can also add some mean count and total count per cell
 
-```{r}
+```{r Add mean counts}
 print(counts(experiment)[1:5, 1:5])
 cat("\n\n")
 print(colMeans(counts(experiment)[1:5, 1:5]))
@@ -133,7 +133,7 @@ This is utterly f\*\*\*\*\*\* disgusting *\~ Python programmer when he saw the R
 
 Let's plot some stats for each batch:
 
-```{r}
+```{r Some stats for each bach}
 cells = colData(experiment) %>% as.data.frame() # convert from c(Data.frame, SingleCellExperiment) to data.frame
 print(cells[1:5, 1:5])
 
@@ -147,7 +147,7 @@ p + geom_violin(aes(x = batch, total_counts, fill = batch)) + th
 
 If we we want to plot some data from specific assay showing a specific *GENE*, then we can use `ggcells` function from `scater` package:
 
-```{r}
+```{r Specific assay plot}
 # Using scater's ggcells we can give a SingleCellExperiment instead of data.frame
 # Above example using scater
 scater::ggcells(experiment, aes(x = batch, y = mean_counts, fill = batch)) + geom_violin() + th
@@ -176,7 +176,7 @@ scater::ggcells(experiment, aes(x = mean_counts, y = var_counts, color = batch))
 
 `Scater` library and `SingleCellExperiment` are tightly bound together, because `Scater` is based on `SingleCellExperiment`. It is very easy to apply some dimensionality reduction techniques and plot some advanced visualization *JUST LIKE THAT*. Let's try to do some dimensionality reduction:
 
-```{r}
+```{r Dim reduction}
 experiment = scater::runPCA(experiment, ncomponents = 2) # Returns new experiment with a new reducedDim object
 print(experiment) # reducedDimNames(1) -> Now containes new entry called "PCA"
 #  Access reduced dimname using reducedDim() functin
@@ -196,7 +196,7 @@ ggpubr::ggarrange(batch_pca, ind_pca, labels = c("PCA colored by batch", "PCA co
 
 So we got the PCA, but it's not widely used in single-cell. Let's do umap and tSNE colored by individual
 
-```{r}
+```{r UMAPs and TSNEs}
 experiment = experiment %>% 
   scater::runUMAP() %>%
   scater::runTSNE()
@@ -214,7 +214,7 @@ ggpubr::ggarrange(ind_umap, ind_tsne)
 
 Even more reduced dimensions
 
-```{r}
+```{r NMF and MDS}
 # Ok let's do more (lok it's so easy idk why people hate R)
 experiment = experiment %>% 
   scater::runNMF() %>%
@@ -286,7 +286,7 @@ print(fetched)
 ```
 
 Create our experiment once again. Let's name it ***sce***
-```{r}
+```{r New SCE}
 sce = SingleCellExperiment(assays = list(counts = as.matrix(molecules)), colData = annotation)
 print(sce)
 ```
@@ -297,7 +297,7 @@ RNA spike-ins are typically made of RNA sequences that are well characterized an
 
 So, we have to remove spike-ins from regular assays and store them as an 'alternative experiment'. Typical examples besided spike-in transcripts can be CRISPR tags in CITE-seq experiments. These data cannot be stored in the main assays of the SingleCellExperiment itself.
 
-```{r}
+```{r RM ERCC}
 # In our dataset spike-ins are annotated as ERCC 
 # (ERCC RNA spike-in mix, Invitrogen™, ThermoFisher Scientific)
 # So (according to SingleCellExperiment schema) we should remove genes (rows)
@@ -326,7 +326,7 @@ sce = sce[-ercc_idx, ] # rownames(18938), previously (19027) - nice
 ```
 
 Now, let’s map ENSEMBL IDs to gene symbols. 
-```{r}
+```{r Mam Ensembls}
 # 'mapIds' gets the mapped ids (column) for a set of keys that are of a particular keytype. Usually returned as a named character vector.
 # In other words this function queries that db with our keys and returns a column that is mapped to our keys
 # So we get something like a dictionary, where key: our serach key, value: returned values
@@ -340,7 +340,7 @@ print(rowData(sce))
 table(is.na(gene_names))
 ```
 From the table command, we can see that most genes were annotated; however, 860 returned “NA.” By default, mapIds returs one symbol per ID; this behaviour can be changed using multiVals argument( we can take first, last, pass some function, etc). Let's remove all those NA's.
-```{r}
+```{r idk}
 sce = sce[!is.na(rowData(sce)$SYMBOL), ]
 print(sce)
 ```
@@ -349,7 +349,7 @@ print(sce)
 
 > The following scater functions allow us to add per-cell and per-gene metrics useful for dataset evaluation. Most popular metrics per cell are total number of counts (UMIs), total number of detected genes, total number of mitochondrial counts, percent of mitochondrial counts, etc.
 
-```{r}
+```{r Compute basic metrics}
 umi_cell <- perCellQCMetrics(sce, use.altexps = T) # Also perform QC for alternative experiments
 
 # sum - sum of counts per cell
@@ -375,7 +375,7 @@ print(rowData(sce)[1:10, ])
 
 ```
 Now plots some QC stats.
-```{r}
+```{r Plots basic stats on QC}
 # Plot a histogram of total number of counts per sample
 # @ is slot, or quicker access to property
 total_hist = ggplot(data = sce@colData %>% as.data.frame(), aes(total)) + geom_histogram(color = "red")
@@ -391,7 +391,7 @@ ggpubr::ggarrange(p1, p2)
 
 Sometimes it’s hard to come up with an obvious filtering cutoff. In this case, adaptive threshold can help us identify points that are more than 3 median absolute deviations (MADs) away from the median in any of the variables we use for QC
 
-```{r}
+```{r Compute outliers}
 # Exclude cells where sum of counts if too loew
 th_sum = isOutlier(sce@colData$sum, log = TRUE, type = "lower") 
 # Exclude cells where total number of detected genes is too low
@@ -410,7 +410,7 @@ DataFrame(
 ) %>% print()
 ```
 All of above could be done in one step XDDDD
-```{r}
+```{r Explain shorter version of QC}
 reasons <- quickPerCellQC(
   umi_cell, 
   sum.field = "sum", 
@@ -422,7 +422,7 @@ colSums(as.matrix(reasons)) %>% print()
 #                        47                       65                           137                       165
 ```
 So according to these QC metrics we have to discard 165 cells. But let's store these information in our colData for now, and don't remove it just yet.
-```{r}
+```{r Add discarded info}
 sce$discard <- reasons$discard
 
 # Just plot which cells to discard
@@ -437,7 +437,7 @@ ggpubr::ggarrange(s_d, s_perc,
 
 ## Highly expressed genes
 Let’s take a look at the most expressed genes in the whole dataset. We will use symbols we obtained using AnnotationDbi.
-```{r}
+```{r Plot highly expressed genes}
 # Use sce, counts assay as the matrix used to get the top expressed genes
 # n: how many top genes?
 # feature_names_to_plot: NULL - use rownames (it means we use original loaded gene names). 
@@ -452,7 +452,7 @@ p + ggtitle("Top 25 expressed genes across all cells")
 ```
 
 We see a lot of genes like "RP*..blah" which are ribosomal genes. It's normal for sc-dataset to containg a lot of ribosomal or mitochondrial genes. Let’s keep the genes which were only detected (expression value > 1) in 2 or more cells. We’ll discard approximately 4,000 weakly expressed genes thanks to this.
-```{r}
+```{r Filter out low expressed genes}
 # By row to use genes not cells
 # Detection_limit = 1 -> Use only genes that have >= 1 read aligned (1 count)
 
@@ -464,9 +464,9 @@ print(table(rowData(sce)$discard))
 ```
 Wow - we have succesfully annotated all cell and marked 4205 as lowly expressed!
 
-# Sensational dimensions reduction
+# Sensational dimensionality reduction (again)
 Let's create a log2 raw transformed assay now and create a SingleCellExperiment object that will apply previous QC.
-```{r}
+```{r Add raw logcounts}
 assay(sce, "logcounts_raw") <- log2(counts(sce) + 1)
 print(sce) # assays(2): counts logcounts
 
@@ -476,7 +476,7 @@ sce.qc
 With log-transformation, we equalize the large difference between strongly and weakly expressed genes, and immediately see cells form groups by replicate, individual, and sequencing depth. Proof:
 
 ##### PCA on raw counts
-```{r}
+```{r PCA on raw counts}
 
 # Again - calculate reduced dim
 sce.tmp = scater::runPCA(sce.qc, exprs_values = "counts")
@@ -484,7 +484,7 @@ plotPCA(sce.tmp, colour_by = "batch", shape_by = "individual")
 ```
 
 #####PCA on log-transformed counts
-```{r}
+```{r PCA on raw logcounts}
 
 # Again - calculate reduced dim
 sce.qc = scater::runPCA(sce.qc, exprs_values = "logcounts_raw")
@@ -493,7 +493,7 @@ plotPCA(sce.qc, colour_by = "batch", shape_by = "individual")
 ```
 Clearly log-transformation is benefitial for our data - it reduces the variance on the first principal component and already separates some biological effects. Moreover, it makes the distribution of the expression values more normal.
 But raw logcounts are not good enough. We should use the logcounts slot (produced by scater) which additionally to log2 normalizes by a lib size. Let's do it.
-```{r}
+```{r Produce logNormCounts}
 # let's use sce for clarity
 # from now on `sce` object is the same as `sce.qc` (it has applied quality control)
 sce = scater::logNormCounts(sce.qc)
@@ -501,14 +501,14 @@ sce # assays(3) counts logcounts_raw logcounts
 ```
 
 Let's run PCA again, this time on logNormCounts
-```{r}
+```{r PCA on logNormCounts}
 sce = runPCA(sce, exprs_values = "logcounts")
 plotPCA(sce, colour_by = "batch", shape_by = "individual")
 
 ```
 ***NOW WE'RE TALKIN'***
 Let's do UMAP and tSNE
-```{r}
+```{r UMAPs and TSNEs on logNormCounts}
 
 sce = sce %>%
   runTSNE(exprs_values = "logcounts") %>%
@@ -527,21 +527,29 @@ We could do a couple of other steps also like:
 
 # Biological analysis
 ## Clustering
-```{r}
+```{r Clustering using sc3}
 # Even more libs
 library(SC3)
 
 # sc3() requires rowData() to have a column named 'feature_symbol' so create it
 rowData(sce)$feature_symbol = rowData(sce)$SYMBOL # just copy existing
-# Biology = f, kse = 3 (biology: dont add anything else besides clusters, kse: number of clusters)
-sce.clus = sc3(sce, ks = 3, biology = F, n_cores = 4)
+# Biology =T, kse = 3 (biology: dont add additional metadata to use with other plotting functions, kse: number of clusters)
+sce.clus = sc3(sce, ks = 3, biology = T, n_cores = 4)
 sce.clus
 ```
+
+## Plot PCA with cluster annotation
+```{r PCA with clusters}
+
+plotPCA(sce.clus, colour_by = "sc3_3_clusters")
+
+```
+
 
 ## Plot consensus map
 > It represents similarity between the cells based on the averaging of clustering results from all combinations of clustering parameters. Similarity 0 (blue) means that the two cells are always assigned to different clusters. In contrast, similarity 1 (red) means that the two cells are always assigned to the same cluster.
 
-```{r}
+```{r Consensus map}
 sc3_plot_consensus(
     sce.clus, k = 3,
     show_pdata = c(
@@ -550,5 +558,30 @@ sc3_plot_consensus(
 )
 ```
 
+## Plot DE genes
+```{r Plot DE genes}
+# https://github.com/hemberg-lab/SC3/issues/84
+# When having rownames as ensembl ids (non unique) there are errors
+# idk why
+# but
+# lets convert
 
+rownames(sce.clus) = rowData(sce.clus)$feature_symbol
 
+sc3_plot_de_genes(
+  sce.clus, 
+  k = 3,
+  show_pdata = c(
+        "individual"
+    ))
+```
+
+## Plot markers
+
+>To find marker genes, for each gene a binary classifier is constructed based on the mean cluster expression values. The classifier prediction is then calculated using the gene expression ranks. The area under the receiver operating characteristic (ROC) curve is used to quantify the accuracy of the prediction. A p-value is assigned to each gene by using the Wilcoxon signed rank test. By default the genes with the area under the ROC curve (AUROC) > 0.85 and with the p-value < 0.01 are selected and the top 10 marker genes of each cluster are visualized in this heatmap.
+
+```{r}
+sc3_plot_markers(sce.clus, k = 3)
+```
+
+# END
