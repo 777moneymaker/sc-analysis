@@ -44,14 +44,14 @@ Splitted into molecules (a tab-delimited file with the gene counts for each cell
 ```{r}
 molecules = read.table("data/tung/molecules.txt", sep = "\t")
 
-molecules
+molecules[1:5, 1:5]
 ```
 
 And annotation for molecules (a tab-delimited text file with the cell annotations)
 
 ```{r}
 annotation = read.table("data/tung/annotation.txt", sep = "\t", header = TRUE)
-annotation
+annotation[1:5, 1:5]
 ```
 
 # Create object of type `SingleCellExperiment`
@@ -98,7 +98,7 @@ logcounts(experiment) <- log2(counts(experiment) + 1) # Add 1 to prevent log(0) 
 logcounts(experiment)[1:5, 1:5]
 ```
 
-We can allso add some mean count and total count per cell
+We can also add some mean count and total count per cell
 
 ```{r}
 print(counts(experiment)[1:5, 1:5])
@@ -136,4 +136,73 @@ scater::ggcells(experiment, aes(x = batch, y = mean_counts, fill = batch)) + geo
 # individual gene
 # expr_values default = logcounts
 scater::ggcells(experiment, aes(x = batch, y = ENSG00000198938, fill = batch), exprs_values = "logcounts") + geom_violin() + th
+
+# And scatter plot
+# First calculate in each sample
+colData(experiment)$var_counts <- colVars(counts(experiment))
+colData(experiment)
+
+# Now plot
+scater::ggcells(experiment, aes(x = mean_counts, y = var_counts, color = batch)) + 
+  geom_point() + 
+  stat_smooth(method = "lm", aes(x = mean_counts, y = var_counts, color = NULL)) +
+  ggpubr::stat_cor(aes(label = after_stat(rr.label), color = NULL))
+              
+```
+### Means what?
+Positive correlation between mean(counts) and var(counts) is typical for RNA-seq, especially raw count data. This is not a good scenario (it's not really problematic if we know how to deal with it), because a lot of expression/FC estimators and test-s producing p-values and q-values assume that mean and variance are independent variables (no correlation). 
+
+# Reduced Dims
+`Scater` library and `SingleCellExperiment` are tightly bound together, because `Scater` is based on `SingleCellExperiment`. It is very easy to apply some dimensionality reduction techniques and plot some advanced visualization *JUST LIKE THAT*. Let's try to do some dimensionality reduction:
+```{r}
+experiment = scater::runPCA(experiment, ncomponents = 2) # Returns new experiment with a new reducedDim object
+print(experiment) # reducedDimNames(1) -> Now containes new entry called "PCA"
+#  Access reduced dimname using reducedDim() functin
+reducedDim(experiment, "PCA")[1:10, ] # first ten rows for clarity
+# Maybe plot some PCA?
+# First create some plots 
+# Colour_by is a name of the column in colData -> Remember? colData is data.frame with additional information for each cell. 
+# We've performed PCA to reduce dimensionality for each *CELL*. 
+# So no we plot each cell and we can add some information -> that's why I used colour_by = "batch"
+
+batch_pca = scater::plotReducedDim(experiment, "PCA", colour_by = "batch")
+ind_pca = scater::plotReducedDim(experiment, "PCA", colour_by = "individual")
+
+ggpubr::ggarrange(batch_pca, ind_pca, labels = c("PCA colored by batch", "PCA colored by individual"), font.label = list(size = 12))
+
+```
+
+So we got the PCA, but it's not widely used in single-cell. Let's do umap and tSNE colored by individual
+```{r}
+experiment = experiment %>% 
+  scater::runUMAP() %>%
+  scater::runTSNE()
+experiment %>% print() # reducedDimNames(3) -> got new entries, named "UMAP" and "TNSE" 
+
+# Lets see new reduced dim
+reducedDim(experiment, "UMAP") %>% head() %>% print
+reducedDim(experiment, "TSNE") %>% head() %>% print()
+# Ok so let's plot it
+ind_umap = scater::plotReducedDim(experiment, "UMAP", colour_by = "individual")
+ind_tsne = scater::plotReducedDim(experiment, "TSNE", colour_by = "individual")
+ggpubr::ggarrange(ind_umap, ind_tsne)
+
+```
+ 
+More XD
+ 
+```{r}
+# Ok let's do more (lok it's so easy idk why people hate R)
+experiment = experiment %>% 
+  scater::runNMF() %>%
+  scater::runMDS()
+experiment %>% print() # Lol 2 new entries - sensational
+# so now we have all 5 reduced dim entries
+reducedDimNames(experiment) %>% print() # [1] "PCA"  "UMAP" "TSNE" "NMF"  "MDS" 
+
+# plot last 2 of them
+ind_nmf = scater::plotReducedDim(experiment, "NMF", colour_by = "individual")
+ind_mds = scater::plotReducedDim(experiment, "MDS", colour_by = "individual")
+ggpubr::ggarrange(ind_nmf, ind_mds)
+
 ```
