@@ -230,7 +230,7 @@ ggpubr::ggarrange(ind_nmf, ind_mds)
 
 ```
 
-# Real analysis
+# Real analysis (Dataset load + QC + Low expression filtering)
 
 > Just do it! \*\~ ur transcriptomics teacher\*
 
@@ -523,5 +523,32 @@ We could do a couple of other steps also like:
 2. Analyze and plot some explenatory variables
 3. blah...blah...blah
 
-In other words we can search for "Confounding Factors". For the sake of teacher, other students and my mental health I'll skip that in this project. Let's do something more fun.
+> In other words we can search for "Confounding Factors". For the *sake of teacher, other students and my mental health* I'll skip that in this project. Let's do something more fun.
+
+# Biological analysis
+## Clustering
+```{r}
+# Even more libs
+library(SC3)
+
+# sc3() requires rowData() to have a column named 'feature_symbol' so create it
+rowData(sce)$feature_symbol = rowData(sce)$SYMBOL # just copy existing
+# Biology = f, kse = 3 (biology: dont add anything else besides clusters, kse: number of clusters)
+sce.clus = sc3(sce, ks = 3, biology = F, n_cores = 4)
+sce.clus
+```
+
+## Plot consensus map
+> It represents similarity between the cells based on the averaging of clustering results from all combinations of clustering parameters. Similarity 0 (blue) means that the two cells are always assigned to different clusters. In contrast, similarity 1 (red) means that the two cells are always assigned to the same cluster.
+
+```{r}
+sc3_plot_consensus(
+    sce.clus, k = 3,
+    show_pdata = c(
+        "individual"
+    )
+)
+```
+
+
 
