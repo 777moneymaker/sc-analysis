@@ -1,6 +1,10 @@
 ---
 title: "Single Cell - Example analysis"
-output: analysis_result
+author: "Miłosz Chodkowski"
+output:
+  html_document:
+    fig_width: 16
+    fig_height: 9
 ---
 
 # Experiment summary
@@ -11,7 +15,7 @@ GEO Accession: ***GSE77288***
 
 # Load libraries
 
-```{r message=FALSE, warning=TRUE}
+```{r}
 if(!require("SingleCellExperiment")){
   BiocManager::install("SingleCellExperiment")
   require("SingleCellExperiment")
@@ -117,7 +121,7 @@ Let's plot some stats for each batch:
 
 ```{r}
 cells = colData(experiment) %>% as.data.frame() # convert from c(Data.frame, SingleCellExperiment) to data.frame
-print(cells)
+print(cells[1:5, 1:5])
 
 th = theme(axis.text.x  = element_text(angle = -45, hjust = -0.1))
 
@@ -149,11 +153,15 @@ scater::ggcells(experiment, aes(x = mean_counts, y = var_counts, color = batch))
   ggpubr::stat_cor(aes(label = after_stat(rr.label), color = NULL))
               
 ```
+
 ### Means what?
-Positive correlation between mean(counts) and var(counts) is typical for RNA-seq, especially raw count data. This is not a good scenario (it's not really problematic if we know how to deal with it), because a lot of expression/FC estimators and test-s producing p-values and q-values assume that mean and variance are independent variables (no correlation). 
+
+Positive correlation between mean(counts) and var(counts) is typical for RNA-seq, especially raw count data. This is not a good scenario (it's not really problematic if we know how to deal with it), because a lot of expression/FC estimators and test-s producing p-values and q-values assume that mean and variance are independent variables (no correlation).
 
 # Reduced Dims
+
 `Scater` library and `SingleCellExperiment` are tightly bound together, because `Scater` is based on `SingleCellExperiment`. It is very easy to apply some dimensionality reduction techniques and plot some advanced visualization *JUST LIKE THAT*. Let's try to do some dimensionality reduction:
+
 ```{r}
 experiment = scater::runPCA(experiment, ncomponents = 2) # Returns new experiment with a new reducedDim object
 print(experiment) # reducedDimNames(1) -> Now containes new entry called "PCA"
@@ -173,6 +181,7 @@ ggpubr::ggarrange(batch_pca, ind_pca, labels = c("PCA colored by batch", "PCA co
 ```
 
 So we got the PCA, but it's not widely used in single-cell. Let's do umap and tSNE colored by individual
+
 ```{r}
 experiment = experiment %>% 
   scater::runUMAP() %>%
@@ -188,9 +197,9 @@ ind_tsne = scater::plotReducedDim(experiment, "TSNE", colour_by = "individual")
 ggpubr::ggarrange(ind_umap, ind_tsne)
 
 ```
- 
+
 More XD
- 
+
 ```{r}
 # Ok let's do more (lok it's so easy idk why people hate R)
 experiment = experiment %>% 
